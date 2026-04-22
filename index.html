@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人狼ドッチ - 正体隠匿カードゲーム</title>
+    <meta name="description" content="2枚のカードから自分の役職を選ぶ、スピーディな人狼ゲーム『人狼ドッチ』をブラウザで。">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app" class="app-container">
+        <!-- 画面遷移エリア -->
+        <main id="main-view">
+            <!-- タイトル暨入室画面 (初期) -->
+            <section id="title-screen" class="screen active">
+                <div class="title-content" style="max-width: 450px; width: 100%;">
+                    <h1 class="game-logo" style="margin-bottom: 0px;">人狼ドッチ</h1>
+                    <p class="tagline" style="margin-bottom: 40px;">配られた2枚、信じるのはどっち？</p>
+                    
+                    <div class="glass" style="padding: 2rem;">
+                        <div class="input-group">
+                            <label for="entry-name">お名前</label>
+                            <input type="text" id="entry-name" placeholder="例：人狼太郎" maxlength="10">
+                        </div>
+
+                        <div class="input-group" style="margin-top: 20px;">
+                            <label for="entry-room">部屋番号（4桁）</label>
+                            <input type="text" id="entry-room" placeholder="1234" maxlength="4" pattern="\\d{4}">
+                        </div>
+
+                        <button id="enter-room-btn" class="btn-primary large" style="width: 100%; margin-top: 20px; margin-bottom: 15px;">部屋に入る / 作る</button>
+                        
+                        <hr style="border: none; border-top: 1px dashed var(--glass-border); margin: 30px 0;">
+
+                        <div style="text-align:center;">
+                            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">前回のルーム情報をリセットしたい場合</p>
+                            <button id="reset-room-btn" class="btn-secondary" style="width: 100%; background: rgba(244, 63, 94, 0.1); border-color: rgba(244, 63, 94, 0.3);">🗑️ ルーム情報をリセット</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ロビー画面 -->
+            <section id="lobby-screen" class="screen">
+                <div class="lobby-content glass" style="max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 2.5rem;">
+                    <h2 style="font-size: 2rem; margin-bottom: 20px; position: sticky; top: -10px; background: inherit; z-index: 10; padding-bottom: 10px;">待機ロビー</h2>
+                    
+                    <!-- NPC追加エリア (デバッグ用) -->
+                    <div style="margin-bottom: 20px;">
+                        <button id="add-npc-btn" class="btn-secondary" style="border: 1px solid var(--glass-border); width: 100%; border-radius: 12px; padding: 12px;">プレイヤー(NPC)を追加する</button>
+                    </div>
+
+                    <!-- 参加者リストエリア -->
+                    <div class="player-list-container" style="margin-bottom: 20px;">
+                        <h3 style="font-size: 1.1rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 5px; margin-bottom: 10px;">参加プレイヤー (<span id="player-count">0</span> / 8)</h3>
+                        <ul id="player-list" class="player-list" style="display: grid; grid-template-columns: 1fr; gap: 10px; list-style: none; margin-bottom: 20px;">
+                            <!-- プレイヤー名リスト -->
+                        </ul>
+                        
+                        <!-- カラー選択エリア -->
+                        <div class="color-picker-container" style="display: flex; flex-direction: column; align-items: center; border-top: 1px dashed var(--glass-border); padding-top: 15px;">
+                            <span style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">あなたのカラー選択</span>
+                            <div class="color-picker" id="color-picker" style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+                                <!-- JSで色リストを生成 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ゲーム設定エリア (全員に表示、操作はホストのみ可能想定) -->
+                    <div id="host-settings-area" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--glass-border);">
+                        <h3 style="margin-bottom: 15px; font-size: 1rem; color: var(--primary);">ゲーム設定</h3>
+                        
+                        <div class="input-group" style="margin-bottom: 15px;">
+                            <label style="font-size: 0.8rem; display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span>議論時間</span>
+                                <span id="time-display-val">3分</span>
+                            </label>
+                            <input type="range" id="setting-discussion-time" min="1" max="10" value="3" style="width: 100%; cursor: pointer;">
+                        </div>
+
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px; border-top: 1px solid var(--glass-border); padding-top: 15px;">
+                            <h4 style="font-size: 0.95rem;">役職設定 <span id="role-count-summary" style="font-size:0.8rem; color: var(--text-muted); font-weight: normal; margin-left: 5px;">(合計: -枚 / 必要: -枚)</span></h4>
+                        </div>
+                        <div id="roles-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                            <!-- JSで生成 -->
+                        </div>
+                    </div>
+
+                    <div class="lobby-actions" style="display: flex; gap: 15px; align-items: center; margin-top: 20px;">
+                        <button id="ready-btn" class="btn-primary" style="flex: 1;">準備完了</button>
+                        <button id="back-to-title" class="btn-ghost" style="padding: 0 10px;">戻る</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ゲームメイン画面 (各フェーズ用) -->
+            <section id="game-screen" class="screen">
+                <!-- ここにフェーズごとのUIが動的に挿入される -->
+                <div id="game-ui-overlay"></div>
+                <div id="phase-indicator" class="phase-badge"></div>
+                <div id="timer-display" class="timer">--:--</div>
+            </section>
+        </main>
+
+        <div id="toast-wrapper"></div>
+    </div>
+
+    <!-- Script Entry Point -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
