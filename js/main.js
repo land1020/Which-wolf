@@ -1,18 +1,30 @@
 /**
- * 人狼ドッチ - Main Entry Point
+ * 人狼ドッチ - Main Entry Point (オンライン対応版)
  */
 
-import { GameState } from './GameState.js';
 import { UIManager } from './UIManager.js';
+import { SocketClient } from './SocketClient.js';
+
+// ====================================
+// サーバーURL設定
+// 本番(Vercel)では window.SOCKET_SERVER_URL を使用
+// 開発時は localhost:3001
+// ====================================
+const SERVER_URL = window.SOCKET_SERVER_URL || `http://${location.hostname}:3001`;
 
 document.addEventListener('DOMContentLoaded', () => {
-    const state = new GameState();
-    const ui = new UIManager(state);
+    const socketClient = new SocketClient(SERVER_URL).connect();
+    const ui = new UIManager(socketClient);
+
+    // サーバーからの状態更新を受信してUIを更新
+    socketClient.onStateUpdate = (roomData) => {
+        ui.applyServerState(roomData);
+    };
 
     // 初期化
     ui.init();
 
     // デバッグ用
-    window.game = { state, ui };
-    console.log('人狼ドッチ initialized.');
+    window.game = { socketClient, ui };
+    console.log('人狼ドッチ (Online) initialized. Server:', SERVER_URL);
 });
