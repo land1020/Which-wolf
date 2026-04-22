@@ -10,7 +10,7 @@ import { SocketClient } from './SocketClient.js';
 // 本番(Vercel)では window.SOCKET_SERVER_URL を使用
 // 開発時は localhost:3001
 // ====================================
-const SERVER_URL = window.SOCKET_SERVER_URL || `http://${location.hostname}:3001`;
+const SERVER_URL = window.SOCKET_SERVER_URL || window.location.origin;
 
 document.addEventListener('DOMContentLoaded', () => {
     const socketClient = new SocketClient(SERVER_URL).connect();
