@@ -88,4 +88,8 @@ export class SocketClient {
     backToLobby(roomId) {
         this.socket.emit('back-to-lobby', { roomId });
     }
+
+    resetRoom(roomId) {
+        this.socket.emit('reset-room', { roomId });
+    }
 }

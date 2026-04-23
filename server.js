@@ -615,6 +615,14 @@ io.on('connection', (socket) => {
         broadcastState(roomId);
     });
 
+    // --- 部屋の強制リセット ---
+    socket.on('reset-room', ({ roomId }) => {
+        if (!rooms[roomId]) return;
+        delete rooms[roomId];
+        console.log(`[Room ${roomId}] Forcefully reset by client.`);
+        broadcastState(roomId); // 削除済みなので空の状態が送られるか、あるいは何もしない
+    });
+
     // --- 切断処理 ---
     socket.on('disconnect', () => {
         const roomId = socket.data.roomId;

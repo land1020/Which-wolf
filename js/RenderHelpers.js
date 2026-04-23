@@ -72,9 +72,11 @@ export function renderColorDots(colors, players, myId) {
 
 export function renderCardChoice(cards) {
     return cards.map((card, i) => `
-        <div class="card-item" style="border:1px solid var(--glass-border);padding:20px;border-radius:12px;background:rgba(0,0,0,0.3);text-align:center">
-            <h3 class="role-desc-btn" data-role="${card.role}" style="color:${roleColor(card.side)};cursor:pointer;text-decoration:underline dotted">${card.role}</h3>
-            <p class="select-role-btn" data-index="${i}" style="font-size:0.8rem;color:#94a3b8;margin-top:10px;cursor:pointer">クリックして選ぶ</p>
+        <div class="card-item select-role-btn" data-index="${i}" style="border:1px solid var(--glass-border);padding:25px;border-radius:16px;background:rgba(255,255,255,0.05);text-align:center;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;min-width:160px">
+            <h3 style="color:${roleColor(card.side)};font-size:1.8rem;margin:0;pointer-events:none">${card.role}</h3>
+            <div style="flex:1"></div>
+            <button class="role-desc-btn btn-ghost" data-role="${card.role}" style="font-size:0.75rem;padding:4px 8px;color:var(--text-muted);border:1px solid rgba(255,255,255,0.1);border-radius:20px">詳細を確認</button>
+            <p style="font-size:0.85rem;color:var(--primary);font-weight:bold;margin:0;pointer-events:none">クリックして選ぶ</p>
         </div>
     `).join('');
 }

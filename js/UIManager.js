@@ -8,16 +8,16 @@ applyServerState(rd){
 this.room=rd;this.roomId=rd.roomId;
 const ph=rd.phase;const idx=rd.currentPlayerIndex;const midIdx=rd.currentMiddayRoleIndex;
 const phChanged=ph!==this.prevPhase;const idxChanged=idx!==this.prevIdx;const midChanged=midIdx!==this.prevMidIdx;
+this.prevPhase=ph;this.prevIdx=idx;this.prevMidIdx=midIdx;
 if(ph==='LOBBY'){this.showScreen('LOBBY');this.updateLobbyUI();}
 else{this.showScreen('GAME');
-if(ph==='CARD_DIST'&&(phChanged||idxChanged))this.renderCardDist();
+if(ph==='CARD_DIST')this.renderCardDist();
 else if(ph==='PREP'&&(phChanged||idxChanged))this.renderPrep();
 else if((ph==='MORNING'||ph==='NIGHT')&&phChanged)this.renderDiscussion(ph);
 else if(ph==='MIDDAY'&&(phChanged||midChanged))this.renderMidday();
 else if(ph==='VOTE'&&(phChanged||idxChanged))this.renderVote();
 else if(ph==='RESULT'&&phChanged)this.renderResult();
-}
-this.prevPhase=ph;this.prevIdx=idx;this.prevMidIdx=midIdx;}
+}}
 init(){
 document.getElementById('enter-room-btn').addEventListener('click',()=>{
 const name=document.getElementById('entry-name').value.trim();
@@ -31,8 +31,10 @@ this.myId=res.playerId;});});
 document.getElementById('reset-room-btn').addEventListener('click',()=>{
 const room=document.getElementById('entry-room').value.trim();
 if(!/^\d{4}$/.test(room)){alert('リセットしたい部屋番号を4桁で入力してください。');return;}
+if(confirm(`部屋番号「${room}」の状態を強制リセットしますか？\n(進行中のゲームも終了します)`)){
 localStorage.removeItem(`werewolf_wins_${room}`);
-alert(`部屋番号「${room}」のルーム情報をリセットしました！`);});
+this.socket.resetRoom(room);
+alert(`部屋番号「${room}」のルーム情報をリセットしました！`);}});
 document.getElementById('back-to-title').addEventListener('click',()=>{location.reload();});
 document.getElementById('add-npc-btn').addEventListener('click',()=>{
 if(!this.roomId)return;this.socket.addNpc(this.roomId);});
@@ -98,7 +100,7 @@ if(cp.chosenRole){
 ov.innerHTML=`<div class="turn-overlay glass" style="text-align:center"><h2>役職は「${cp.chosenRole.role}」に決定しました</h2><button id="next-turn-btn" class="btn-primary" style="margin-top:20px">次へ</button></div>`;
 document.getElementById('next-turn-btn').addEventListener('click',()=>this.socket.nextPlayerTurn(this.roomId));return;}
 ov.innerHTML=`<div class="turn-overlay glass"><h2>${cp.name} さんのカード</h2><p>自分の役職（ドッチか）を選んでください。</p><div class="cards-container" style="display:flex;gap:20px;margin-top:30px">${renderCardChoice(cp.dealtCards)}</div></div>`;
-ov.querySelectorAll('.role-desc-btn').forEach(b=>b.addEventListener('click',()=>{const d=ROLE_DEFS[b.dataset.role];if(d)alert(`【${b.dataset.role}】(${d.faction})\n\n${d.desc}`);}));
+ov.querySelectorAll('.role-desc-btn').forEach(b=>b.addEventListener('click',(e)=>{e.stopPropagation();const d=ROLE_DEFS[b.dataset.role];if(d)alert(`【${b.dataset.role}】(${d.faction})\n\n${d.desc}`);}));
 ov.querySelectorAll('.select-role-btn').forEach(b=>b.addEventListener('click',()=>{
 this.socket.chooseCard(this.roomId,parseInt(b.dataset.index));}));}
 renderPrep(){
