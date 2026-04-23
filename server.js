@@ -105,6 +105,7 @@ function sanitizeRoomForBroadcast(room) {
             draggedDown: p.draggedDown || false,
             votedTo: p.votedTo || null,
             isWinner: p.isWinner || false,
+            prepFinished: p.prepFinished || false,
             // カード情報（フェーズに応じてクライアント側で表示制御）
             dealtCards: p.dealtCards || null,
             chosenRole: p.chosenRole || null,
@@ -161,6 +162,7 @@ function setupCardDistribution(room) {
         p.draggedDown = false;
         p.votedTo = null;
         p.isWinner = false;
+        p.prepFinished = false;
     });
 
     room.cards = cards;
@@ -194,6 +196,7 @@ function setPhase(room, newPhase) {
             p.remainingCard = null;
             p.dealtCards = null;
             p.isWinner = false;
+            p.prepFinished = false;
         });
         room.winCountUpdated = false;
         room.executionResult = null;
@@ -311,27 +314,31 @@ function processNpcTurns(roomId) {
     const processNext = () => {
         if (!rooms[roomId]) return;
         if (room.phase === 'CARD_DIST') {
-            const cp = room.players[room.currentPlayerIndex];
-            if (!cp || !cp.isNpc) return;
-            // NPCはランダムにカード選択
-            const idx = Math.random() < 0.5 ? 0 : 1;
-            cp.chosenRole = cp.dealtCards[idx];
-            cp.remainingCard = cp.dealtCards[idx === 0 ? 1 : 0];
-            room.currentPlayerIndex++;
-            if (room.currentPlayerIndex >= room.players.length) {
+            const pendingNpcs = room.players.filter(p => p.isNpc && !p.chosenRole);
+            if (pendingNpcs.length === 0) return;
+            
+            pendingNpcs.forEach(npc => {
+                const idx = Math.random() < 0.5 ? 0 : 1;
+                npc.chosenRole = npc.dealtCards[idx];
+                npc.remainingCard = npc.dealtCards[idx === 0 ? 1 : 0];
+            });
+            
+            if (room.players.every(p => p.chosenRole)) {
                 setPhase(room, 'PREP');
             }
             broadcastState(roomId);
-            setTimeout(processNext, 300);
         } else if (room.phase === 'PREP') {
-            const cp = room.players[room.currentPlayerIndex];
-            if (!cp || !cp.isNpc) return;
-            room.currentPlayerIndex++;
-            if (room.currentPlayerIndex >= room.players.length) {
+            const pendingNpcs = room.players.filter(p => p.isNpc && !p.prepFinished);
+            if (pendingNpcs.length === 0) return;
+            
+            pendingNpcs.forEach(npc => {
+                npc.prepFinished = true;
+            });
+            
+            if (room.players.every(p => p.prepFinished)) {
                 setPhase(room, 'MORNING');
             }
             broadcastState(roomId);
-            setTimeout(processNext, 300);
         } else if (room.phase === 'MIDDAY') {
             const cr = room.middayRoles[room.currentMiddayRoleIndex];
             const hasRole = room.players.some(p => p.chosenRole && p.chosenRole.role === cr && !p.isNpc);
@@ -399,6 +406,7 @@ io.on('connection', (socket) => {
             remainingCard: null,
             dealtCards: null,
             isWinner: false,
+            prepFinished: false,
         };
 
         room.players.push(player);
@@ -436,6 +444,7 @@ io.on('connection', (socket) => {
             remainingCard: null,
             dealtCards: null,
             isWinner: false,
+            prepFinished: false,
         });
 
         broadcastState(roomId);
@@ -486,16 +495,18 @@ io.on('connection', (socket) => {
     socket.on('choose-card', ({ roomId, cardIndex }) => {
         const room = rooms[roomId];
         if (!room || room.phase !== 'CARD_DIST') return;
-        const currentPlayer = room.players[room.currentPlayerIndex];
-        if (!currentPlayer || currentPlayer.id !== socket.id) return;
-        if (currentPlayer.chosenRole) return; // 既に選択済み
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || player.chosenRole) return;
 
-        const chosen = currentPlayer.dealtCards[cardIndex];
-        const remaining = currentPlayer.dealtCards[cardIndex === 0 ? 1 : 0];
+        const chosen = player.dealtCards[cardIndex];
+        const remaining = player.dealtCards[cardIndex === 0 ? 1 : 0];
 
-        currentPlayer.chosenRole = chosen;
-        currentPlayer.remainingCard = remaining;
+        player.chosenRole = chosen;
+        player.remainingCard = remaining;
 
+        if (room.players.every(p => p.chosenRole)) {
+            setPhase(room, 'PREP');
+        }
         broadcastState(roomId);
     });
 
@@ -518,11 +529,12 @@ io.on('connection', (socket) => {
     socket.on('end-prep', ({ roomId }) => {
         const room = rooms[roomId];
         if (!room || room.phase !== 'PREP') return;
-        const currentPlayer = room.players[room.currentPlayerIndex];
-        if (!currentPlayer || currentPlayer.id !== socket.id) return;
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || player.prepFinished) return;
 
-        room.currentPlayerIndex++;
-        if (room.currentPlayerIndex >= room.players.length) {
+        player.prepFinished = true;
+
+        if (room.players.every(p => p.prepFinished)) {
             setPhase(room, 'MORNING');
         }
         broadcastState(roomId);
@@ -560,14 +572,13 @@ io.on('connection', (socket) => {
             }
         }
 
-        // DJのカード入れ替え
-        if (action.type === 'swap-remaining' && currentRole === 'DJ') {
-            const t1 = room.players.find(p => p.id === action.targetId1);
-            const t2 = room.players.find(p => p.id === action.targetId2);
-            if (t1 && t2) {
-                const temp = t1.remainingCard;
-                t1.remainingCard = t2.remainingCard;
-                t2.remainingCard = temp;
+        // DJのカード入れ替え（指定した1名の役職と残りカードを交換）
+        if (action.type === 'swap-self-cards' && currentRole === 'DJ') {
+            const target = room.players.find(p => p.id === action.targetId);
+            if (target && target.chosenRole && target.remainingCard) {
+                const temp = target.chosenRole;
+                target.chosenRole = target.remainingCard;
+                target.remainingCard = temp;
             }
         }
 

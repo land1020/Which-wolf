@@ -12,7 +12,7 @@ this.prevPhase=ph;this.prevIdx=idx;this.prevMidIdx=midIdx;
 if(ph==='LOBBY'){this.showScreen('LOBBY');this.updateLobbyUI();}
 else{this.showScreen('GAME');
 if(ph==='CARD_DIST')this.renderCardDist();
-else if(ph==='PREP'&&(phChanged||idxChanged))this.renderPrep();
+else if(ph==='PREP')this.renderPrep();
 else if((ph==='MORNING'||ph==='NIGHT')&&phChanged)this.renderDiscussion(ph);
 else if(ph==='MIDDAY'&&(phChanged||midChanged))this.renderMidday();
 else if(ph==='VOTE'&&(phChanged||idxChanged))this.renderVote();
@@ -92,37 +92,31 @@ rb.disabled=!ok;rb.style.opacity=ok?'1':'0.5';rb.style.cursor=ok?'pointer':'not-
 rb.textContent=this.isHost?'ゲーム開始':'ホストの開始を待機中...';}}
 renderCardDist(){
 const ov=document.getElementById('game-ui-overlay');
-const cp=this.room.players[this.room.currentPlayerIndex];
-if(!cp)return;
-const isMyTurn=cp.id===this.myId;
-if(!isMyTurn){ov.innerHTML=`<div class="turn-overlay glass" style="text-align:center"><h2>${cp.name} さんがカードを選択中...</h2><p>しばらくお待ちください。</p></div>`;return;}
-if(cp.chosenRole){
-ov.innerHTML=`<div class="turn-overlay glass" style="text-align:center"><h2>役職は「${cp.chosenRole.role}」に決定しました</h2><button id="next-turn-btn" class="btn-primary" style="margin-top:20px">次へ</button></div>`;
-document.getElementById('next-turn-btn').addEventListener('click',()=>this.socket.nextPlayerTurn(this.roomId));return;}
-ov.innerHTML=`<div class="turn-overlay glass"><h2>${cp.name} さんのカード</h2><p>自分の役職（ドッチか）を選んでください。</p><div class="cards-container" style="display:flex;gap:20px;margin-top:30px">${renderCardChoice(cp.dealtCards)}</div></div>`;
+const me=this.me;
+if(!me)return;
+if(me.chosenRole){
+const waiting=this.room.players.filter(p=>!p.chosenRole).length;
+ov.innerHTML=`<div class="turn-overlay glass" style="text-align:center"><h2>あなたは「${me.chosenRole.role}」を選択しました</h2><div style="margin-top:20px;padding:20px;background:rgba(0,0,0,0.2);border-radius:12px;border:1px dashed var(--glass-border)"><p style="font-size:1.2rem;color:var(--primary);margin-bottom:10px">他のプレイヤーが選択中です...</p><p style="color:var(--text-muted)">あと ${waiting} 人の完了を待っています。</p></div></div>`;return;}
+ov.innerHTML=`<div class="turn-overlay glass"><h2>カードを選択してください</h2><p>自分の役職（ドッチか）を1枚選んでください。</p><div class="cards-container" style="display:flex;gap:20px;margin-top:30px;justify-content:center">${renderCardChoice(me.dealtCards)}</div></div>`;
 ov.querySelectorAll('.role-desc-btn').forEach(b=>b.addEventListener('click',(e)=>{e.stopPropagation();const d=ROLE_DEFS[b.dataset.role];if(d)alert(`【${b.dataset.role}】(${d.faction})\n\n${d.desc}`);}));
-ov.querySelectorAll('.select-role-btn').forEach(b=>b.addEventListener('click',()=>{
-this.socket.chooseCard(this.roomId,parseInt(b.dataset.index));}));}
+ov.querySelectorAll('.select-role-btn').forEach(b=>b.addEventListener('click',()=>{this.socket.chooseCard(this.roomId,parseInt(b.dataset.index));}));}
 renderPrep(){
 const ov=document.getElementById('game-ui-overlay');
-const cp=this.room.players[this.room.currentPlayerIndex];
-if(!cp)return;
-const isMyTurn=cp.id===this.myId;
-if(!isMyTurn){ov.innerHTML=`<div class="turn-overlay glass" style="text-align:center"><h2>${cp.name} さんが準備フェーズ行動中...</h2><p>しばらくお待ちください。</p></div>`;return;}
-const rn=cp.chosenRole?cp.chosenRole.role:'市民';
+const me=this.me;
+if(!me)return;
+if(me.prepFinished){
+const waiting=this.room.players.filter(p=>!p.prepFinished).length;
+ov.innerHTML=`<div class="turn-overlay glass" style="text-align:center"><h2>準備が完了しました</h2><div style="margin-top:20px;padding:20px;background:rgba(0,0,0,0.2);border-radius:12px;border:1px dashed var(--glass-border)"><p style="font-size:1.2rem;color:var(--primary);margin-bottom:10px">他のプレイヤーが行動中です...</p><p style="color:var(--text-muted)">あと ${waiting} 人の完了を待っています。</p></div></div>`;return;}
+const rn=me.chosenRole?me.chosenRole.role:'市民';
 let ah='';
 if(rn==='人狼'||rn==='大狼'){
-const wolves=this.room.players.filter(p=>p.chosenRole&&(p.chosenRole.role==='人狼'||p.chosenRole.role==='大狼')&&p.id!==cp.id);
+const wolves=this.room.players.filter(p=>p.chosenRole&&(p.chosenRole.role==='人狼'||p.chosenRole.role==='大狼')&&p.id!==this.myId);
 ah=wolves.length>0?`<p>仲間の人狼は: <strong>${wolves.map(w=>w.name).join(', ')}</strong> です</p>`:`<p>仲間の人狼はいません。（あなたが単独です）</p>`;
 }else if(rn==='少年'){
-const boys=this.room.players.filter(p=>p.chosenRole&&p.chosenRole.role==='少年'&&p.id!==cp.id);
+const boys=this.room.players.filter(p=>p.chosenRole&&p.chosenRole.role==='少年'&&p.id!==this.myId);
 ah=boys.length>0?`<p>仲間の少年は: <strong>${boys.map(b=>b.name).join(', ')}</strong> です</p>`:`<p>仲間の少年はいません。</p>`;
 }else if(rn==='占い師'){
-ah=`<p>【占い師の能力】占う対象を選んでください。</p>
-<div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
-${renderTargetButtons(this.room.players,this.myId,'prep-seer-btn',p=>p.name+'の役職を占う')}
-<button class="btn-secondary prep-seer-remain-btn">残りカードから2枚占う</button></div>
-<div id="seer-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;
+ah=`<p>【占い師の能力】占う対象を選んでください。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${renderTargetButtons(this.room.players,this.myId,'prep-seer-btn',p=>p.name+'の役職を占う')}<button class="btn-secondary prep-seer-remain-btn">残りカードから2枚占う</button></div><div id="seer-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;
 }else{ah=`<p>あなたの役職（${rn}）は夜のアクションがありません。</p>`;}
 ov.innerHTML=`<div class="turn-overlay glass"><h2>あなたの役職: ${rn}</h2><div style="margin:20px 0">${ah}</div><button id="end-prep-btn" class="btn-primary" style="margin-top:20px">完了して次へ</button></div>`;
 if(rn==='占い師'){
@@ -189,7 +183,7 @@ const me=this.me;let ah='';
 if(rn==='情報屋'){ah=`<p>【情報屋】誰か一人の残りカードをすべて見ることができます。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${renderTargetButtons(this.room.players,this.myId,'midday-action-btn',p=>p.name+'の残りカードを見る')}</div><div id="midday-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;}
 else if(rn==='警察'){ah=`<p>【警察】誰か一人の残りカードの1枚を見ることができます。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${renderTargetButtons(this.room.players,this.myId,'midday-action-btn',p=>p.name+'の残りカードを見る')}</div><div id="midday-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;}
 else if(rn==='怪盗'){ah=`<p>【怪盗】自分の役職と誰かの役職カードを交換し、入れ替えたカードを確認します。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${renderTargetButtons(this.room.players,this.myId,'midday-action-btn',p=>p.name+'の役職と入れ替える')}</div><div id="midday-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;}
-else if(rn==='DJ'){ah=`<p>【DJ】誰かの残りカードと、別の誰かの残りカードを入れ替えます。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${renderTargetButtons(this.room.players,this.myId,'midday-action-btn-multi',p=>p.name)}</div><div id="midday-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;}
+else if(rn==='DJ'){ah=`<p>【DJ】指定したプレイヤーの「役職カード」と「残りカード」を入れ替えます。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${this.room.players.map(p=>`<button class="btn-secondary midday-action-btn" data-target="${p.id}">${p.name}</button>`).join('')}</div><div id="midday-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;}
 ov.innerHTML=`<div class="turn-overlay glass"><h2>あなたの役職: ${rn}</h2><div style="margin:20px 0">${ah}</div><button id="end-midday-btn" class="btn-primary" style="margin-top:20px">完了して次へ</button></div>`;
 const rd=document.getElementById('midday-result');let used=false;let djSel=[];
 if(rn==='情報屋'||rn==='警察'){
@@ -202,13 +196,10 @@ if(used)return;this.socket.middayAction(this.roomId,{type:'swap-role',targetId:b
 const t=this.room.players.find(p=>p.id===b.dataset.target);
 rd.innerHTML=`${t.name}の役職と入れ替えました。`;used=true;}));}
 else if(rn==='DJ'){
-ov.querySelectorAll('.midday-action-btn-multi').forEach(b=>b.addEventListener('click',()=>{
-if(used)return;if(djSel.includes(b.dataset.target))return;
-djSel.push(b.dataset.target);b.style.backgroundColor='var(--primary)';
-if(djSel.length===2){
-this.socket.middayAction(this.roomId,{type:'swap-remaining',targetId1:djSel[0],targetId2:djSel[1]});
-const t1=this.room.players.find(p=>p.id===djSel[0]);const t2=this.room.players.find(p=>p.id===djSel[1]);
-rd.innerHTML=`${t1.name}と${t2.name}の残りカードを入れ替えました。`;used=true;}}));}
+ov.querySelectorAll('.midday-action-btn').forEach(b=>b.addEventListener('click',()=>{
+if(used)return;this.socket.middayAction(this.roomId,{type:'swap-self-cards',targetId:b.dataset.target});
+const t=this.room.players.find(p=>p.id===b.dataset.target);
+rd.innerHTML=`${t.name}の役職と残りカードを入れ替えました。`;used=true;}));}
 document.getElementById('end-midday-btn').addEventListener('click',()=>this.socket.nextMiddayTurn(this.roomId));}
 renderVote(){
 const ov=document.getElementById('game-ui-overlay');
