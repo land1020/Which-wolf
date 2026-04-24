@@ -106,6 +106,8 @@ function sanitizeRoomForBroadcast(room) {
             votedTo: p.votedTo || null,
             isWinner: p.isWinner || false,
             prepFinished: p.prepFinished || false,
+            voted: p.votedTo !== null,
+            isOffline: p.isOffline || false,
             // カード情報（フェーズに応じてクライアント側で表示制御）
             dealtCards: p.dealtCards || null,
             chosenRole: p.chosenRole || null,
@@ -352,19 +354,20 @@ function processNpcTurns(roomId) {
                 setTimeout(processNext, 300);
             }
         } else if (room.phase === 'VOTE') {
-            const cp = room.players[room.currentPlayerIndex];
-            if (!cp || !cp.isNpc) return;
-            // NPCはランダムに投票
-            const targets = room.players.filter(p => p.id !== cp.id);
-            const target = targets[Math.floor(Math.random() * targets.length)];
-            cp.votedTo = target.id;
-            room.currentPlayerIndex++;
-            if (room.currentPlayerIndex >= room.players.length) {
+            const pendingNpcs = room.players.filter(p => p.isNpc && p.votedTo === null);
+            if (pendingNpcs.length === 0) return;
+            
+            pendingNpcs.forEach(npc => {
+                const targets = room.players.filter(p => p.id !== npc.id);
+                const target = targets[Math.floor(Math.random() * targets.length)];
+                npc.votedTo = target.id;
+            });
+            
+            if (room.players.every(p => p.votedTo !== null)) {
                 executeVotingResult(room);
                 setPhase(room, 'RESULT');
             }
             broadcastState(roomId);
-            setTimeout(processNext, 300);
         }
     };
 
@@ -385,7 +388,7 @@ io.on('connection', (socket) => {
             if (callback) callback({ error: 'ゲームはすでに開始されています。' });
             return;
         }
-        if (room.players.length >= room.settings.maxPlayers) {
+        if (room.players.filter(p => !p.isNpc).length >= room.settings.maxPlayers) {
             if (callback) callback({ error: '部屋が満員です。' });
             return;
         }
@@ -407,6 +410,7 @@ io.on('connection', (socket) => {
             dealtCards: null,
             isWinner: false,
             prepFinished: false,
+            isOffline: false,
         };
 
         room.players.push(player);
@@ -417,6 +421,40 @@ io.on('connection', (socket) => {
         if (callback) callback({ success: true, playerId: socket.id });
         broadcastState(roomId);
         console.log(`[Room ${roomId}] ${playerName} joined. Players: ${room.players.length}`);
+    });
+
+    // --- 再接続（ゲーム中にブラウザを閉じた場合など） ---
+    socket.on('rejoin-room', ({ roomId, playerName }, callback) => {
+        const room = rooms[roomId];
+        if (!room) {
+            if (callback) callback({ error: '部屋が見つかりません。部屋番号を確認してください。' });
+            return;
+        }
+
+        // 同名プレイヤーを探す（NPCは除く）
+        const existing = room.players.find(p => p.name === playerName && !p.isNpc);
+        if (!existing) {
+            if (callback) callback({ error: 'この部屋にそのお名前のプレイヤーが見つかりません。' });
+            return;
+        }
+
+        // タイムアウトをキャンセル
+        if (existing._offlineTimer) {
+            clearTimeout(existing._offlineTimer);
+            delete existing._offlineTimer;
+        }
+
+        // ソケットIDを更新して復帰
+        const oldId = existing.id;
+        existing.id = socket.id;
+        existing.isOffline = false;
+        socket.join(roomId);
+        socket.data.roomId = roomId;
+        socket.data.playerId = socket.id;
+
+        console.log(`[Room ${roomId}] ${playerName} rejoined (${oldId} -> ${socket.id})`);
+        if (callback) callback({ success: true, playerId: socket.id, phase: room.phase });
+        broadcastState(roomId);
     });
 
     // --- NPC追加（デバッグ用） ---
@@ -602,13 +640,12 @@ io.on('connection', (socket) => {
     socket.on('vote', ({ roomId, targetId }) => {
         const room = rooms[roomId];
         if (!room || room.phase !== 'VOTE') return;
-        const currentPlayer = room.players[room.currentPlayerIndex];
-        if (!currentPlayer || currentPlayer.id !== socket.id) return;
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || player.votedTo !== null) return;
 
-        currentPlayer.votedTo = targetId;
-        room.currentPlayerIndex++;
+        player.votedTo = targetId;
 
-        if (room.currentPlayerIndex >= room.players.length) {
+        if (room.players.every(p => p.votedTo !== null)) {
             executeVotingResult(room);
             setPhase(room, 'RESULT');
         }
@@ -640,9 +677,39 @@ io.on('connection', (socket) => {
         if (!roomId || !rooms[roomId]) return;
 
         const room = rooms[roomId];
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || player.isNpc) return;
+
+        // ゲーム中の場合は即時削除せず「オフライン」マークを付けて60秒待つ
+        if (room.phase !== 'LOBBY') {
+            player.isOffline = true;
+            console.log(`[Room ${roomId}] ${player.name} went offline (game in progress). Waiting 60s for rejoin.`);
+            broadcastState(roomId);
+
+            player._offlineTimer = setTimeout(() => {
+                if (!rooms[roomId]) return;
+                const idx = room.players.findIndex(p => p.id === player.id);
+                if (idx === -1) return;
+                const wasHost = room.players[idx].isHost;
+                room.players.splice(idx, 1);
+                if (room.players.length === 0) {
+                    delete rooms[roomId];
+                    console.log(`[Room ${roomId}] Deleted (empty after offline timeout).`);
+                    return;
+                }
+                if (wasHost && room.players.length > 0) {
+                    const nextHuman = room.players.find(p => !p.isNpc);
+                    if (nextHuman) nextHuman.isHost = true;
+                }
+                broadcastState(roomId);
+                console.log(`[Room ${roomId}] ${player.name} removed after offline timeout.`);
+            }, 60000);
+            return;
+        }
+
+        // ロビー中は即時削除
         const index = room.players.findIndex(p => p.id === socket.id);
         if (index === -1) return;
-
         const wasHost = room.players[index].isHost;
         room.players.splice(index, 1);
 
@@ -655,11 +722,12 @@ io.on('connection', (socket) => {
 
         // ホストが抜けた場合は次の人をホストに
         if (wasHost && room.players.length > 0) {
-            room.players[0].isHost = true;
+            const nextHuman = room.players.find(p => !p.isNpc);
+            if (nextHuman) nextHuman.isHost = true;
         }
 
         broadcastState(roomId);
-        console.log(`[Room ${roomId}] Player disconnected. Remaining: ${room.players.length}`);
+        console.log(`[Room ${roomId}] Player disconnected (lobby). Remaining: ${room.players.length}`);
     });
 });
 

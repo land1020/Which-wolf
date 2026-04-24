@@ -300,3 +300,34 @@ input[type="text"]:focus {
     transform: translate(-50%, -50%);
     z-index: -1;
 }
+
+/* Spinner & Waiting UI */
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--primary);
+    animation: spin 1s ease-in-out infinite;
+    margin: 0 auto;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.waiting-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    transition: var(--transition-smooth);
+}
+
+.waiting-dot.active {
+    background: var(--primary);
+    box-shadow: 0 0 10px var(--primary);
+}
+
+.waiting-dot.inactive {
+    background: rgba(255, 255, 255, 0.1);
+}

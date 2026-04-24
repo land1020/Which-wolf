@@ -17,6 +17,10 @@ export class SocketClient {
 
         this.socket.on('connect', () => {
             console.log(`[Socket] Connected: ${this.socket.id}`);
+            // 再接続コールバック（存在する場合）
+            if (this.onReconnect) {
+                this.onReconnect();
+            }
         });
 
         this.socket.on('disconnect', () => {
@@ -39,6 +43,11 @@ export class SocketClient {
     // --- 送信系メソッド ---
     joinRoom(roomId, playerName, callback) {
         this.socket.emit('join-room', { roomId, playerName }, callback);
+    }
+
+    // 再入室（ゲーム中にブラウザを閉じた場合）
+    rejoinRoom(roomId, playerName, callback) {
+        this.socket.emit('rejoin-room', { roomId, playerName }, callback);
     }
 
     addNpc(roomId) {
