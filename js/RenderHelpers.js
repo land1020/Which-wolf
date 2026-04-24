@@ -13,7 +13,7 @@ export const ROLE_DEFS = {
     '大狼': { side: 'Red', faction: '人狼チーム', desc: '準備フェーズ: 仲間の人狼を確認する。占い師に占われても「市民」と判定される。' },
     '少年': { side: 'Blue', faction: '人間チーム', desc: '準備フェーズ: 仲間の「少年」が誰かを確認できる。' },
     '怪盗': { side: 'Blue', faction: '人間チーム', desc: '昼フェーズ:「誰かの役職カード」と「自分の役職カード」を入れ替える。' },
-    '情報屋': { side: 'Blue', faction: '人間チーム', desc: '昼フェーズ:「誰かの残りカードエリア」のカードをすべて確認する。' },
+    '情報屋': { side: 'Blue', faction: '人間チーム', desc: '昼フェーズ:「誰か2人の残りカード」をそれぞれ1枚ずつ確認する。' },
     '逃亡者': { side: 'Gray', faction: '第3陣営', desc: '自分が追放されなければ勝利。' },
     '罠師': { side: 'Blue', faction: '人間チーム', desc: '自分が追放されると、自分に投票したプレイヤーを道連れにする。' }
 };
@@ -27,9 +27,9 @@ export function roleColor(side) {
     return side === 'Red' ? '#f43f5e' : (side === 'Gray' ? '#9ca3af' : '#3b82f6');
 }
 
-export function renderPlayerListItems(players, roomId, winCounts = {}) {
+export function renderPlayerListItems(players, roomId) {
     return players.map(p => {
-        const winCount = winCounts[p.name] || 0;
+        const winCount = p.cumulativeWins || 0;
         const crown = winCount > 0 ? `<span style="color:#fbbf24;font-weight:bold;margin-left:auto;text-shadow:0 0 5px rgba(251,191,36,0.5);font-size:1rem" title="累計勝利数">👑 ${winCount}</span>` : '';
         const offlineBadge = p.isOffline ? `<span style="margin-left:8px;padding:2px 8px;background:rgba(244,63,94,0.2);color:#f43f5e;border:1px solid rgba(244,63,94,0.4);border-radius:10px;font-size:0.75rem;font-weight:bold;animation:pulse 1.5s ease-in-out infinite">📵 切断中</span>` : '';
         return `<li style="background:linear-gradient(90deg,${p.color}${p.isOffline?'18':'30'} 0%,rgba(0,0,0,0.3) 100%);border-left:4px solid ${p.isOffline?'#666':p.color};padding:12px 15px;border-radius:6px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,0.2);opacity:${p.isOffline?'0.7':'1'}">
@@ -88,9 +88,9 @@ export function renderTargetButtons(players, myId, btnClass, labelFn) {
     ).join('');
 }
 
-export function renderResultPlayers(players, roomId, winCounts = {}) {
+export function renderResultPlayers(players, roomId) {
     return players.map(p => {
-        const winCount = winCounts[p.name] || 0;
+        const winCount = p.cumulativeWins || 0;
         const winLabel = p.isWinner ?
             `<span style="margin-left:12px;padding:4px 10px;background:linear-gradient(45deg,#fbbf24,#f59e0b);color:#000;font-weight:900;font-size:0.9rem;border-radius:6px;box-shadow:0 0 10px rgba(245,158,11,0.6);border:1px solid #fff">🏆 勝利</span>` :
             `<span style="margin-left:12px;padding:3px 8px;background:rgba(255,255,255,0.1);color:#9ca3af;font-weight:bold;font-size:0.8rem;border-radius:6px;border:1px solid rgba(255,255,255,0.2)">💀 敗北</span>`;

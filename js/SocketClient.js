@@ -82,9 +82,10 @@ export class SocketClient {
         this.socket.emit('skip-timer', { roomId, nextPhase });
     }
 
-    middayAction(roomId, action) {
-        this.socket.emit('midday-action', { roomId, action });
+    middayAction(roomId, action, callback) {
+        this.socket.emit('midday-action', { roomId, action }, callback);
     }
+
 
     nextMiddayTurn(roomId) {
         this.socket.emit('next-midday-turn', { roomId });

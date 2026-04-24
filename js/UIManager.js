@@ -114,7 +114,7 @@ updateLobbyUI(){
 if(!this.room)return;
 const list=document.getElementById('player-list');
 const count=document.getElementById('player-count');
-list.innerHTML=renderPlayerListItems(this.room.players,this.roomId,this.room.winCounts);
+list.innerHTML=renderPlayerListItems(this.room.players,this.roomId);
 count.textContent=this.room.players.length;
 // color picker
 const picker=document.getElementById('color-picker');
@@ -260,26 +260,41 @@ document.getElementById('midday-act-btn').addEventListener('click',()=>this.show
 showMiddayAction(rn){
 const ov=document.getElementById('game-ui-overlay');
 const me=this.me;let ah='';
-if(rn==='情報屋'){ah=`<p>【情報屋】誰か一人の残りカードをすべて見ることができます。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${renderTargetButtons(this.room.players,this.myId,'midday-action-btn',p=>p.name+'の残りカードを見る')}</div><div id="midday-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;}
-else if(rn==='警察'){ah=`<p>【警察】誰か一人の残りカードの1枚を見ることができます。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${renderTargetButtons(this.room.players,this.myId,'midday-action-btn',p=>p.name+'の残りカードを見る')}</div><div id="midday-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;}
+if(rn==='情報屋'){ah=`<p>【情報屋】誰か2人の残りカードをそれぞれ1枚ずつ確認できます。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${renderTargetButtons(this.room.players,this.myId,'midday-action-btn',p=>p.name+'の残りカードを見る')}</div><div id="midday-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;}
+else if(rn==='警察'){ah=`<p>【警察】誰か一人の残りカードを1枚確認できます。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${renderTargetButtons(this.room.players,this.myId,'midday-action-btn',p=>p.name+'の残りカードを見る')}</div><div id="midday-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;}
 else if(rn==='怪盗'){ah=`<p>【怪盗】自分の役職と誰かの役職カードを交換し、入れ替えたカードを確認します。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${renderTargetButtons(this.room.players,this.myId,'midday-action-btn',p=>p.name+'の役職と入れ替える')}</div><div id="midday-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;}
 else if(rn==='DJ'){ah=`<p>【DJ】指定したプレイヤーの「役職カード」と「残りカード」を入れ替えます。</p><div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">${this.room.players.map(p=>`<button class="btn-secondary midday-action-btn" data-target="${p.id}">${p.name}</button>`).join('')}</div><div id="midday-result" style="margin-top:20px;font-weight:bold;color:var(--primary)"></div>`;}
 ov.innerHTML=`<div class="turn-overlay glass"><h2>あなたの役職: ${rn}</h2><div style="margin:20px 0">${ah}</div><button id="end-midday-btn" class="btn-primary" style="margin-top:20px">完了して次へ</button></div>`;
-const rd=document.getElementById('midday-result');let used=false;let djSel=[];
+const rd=document.getElementById('midday-result');let used=false;let count=0;let results=[];
 if(rn==='情報屋'||rn==='警察'){
 ov.querySelectorAll('.midday-action-btn').forEach(b=>b.addEventListener('click',()=>{
 if(used)return;const t=this.room.players.find(p=>p.id===b.dataset.target);
-rd.innerHTML=`${t.name}の残りカードは「${t.remainingCard.role}」です。`;used=true;}));}
+if(rn==='情報屋'){
+if(results.some(r=>r.id===t.id))return;
+results.push({id:t.id,name:t.name,role:t.remainingCard.role});
+rd.innerHTML=results.map(r=>`<p>${r.name}の残りカード: 「${r.role}」</p>`).join('');
+if(results.length>=2)used=true;
+}else{
+rd.innerHTML=`${t.name}の残りカードは「${t.remainingCard.role}」です。`;used=true;}}));}
 else if(rn==='怪盗'){
 ov.querySelectorAll('.midday-action-btn').forEach(b=>b.addEventListener('click',()=>{
-if(used)return;this.socket.middayAction(this.roomId,{type:'swap-role',targetId:b.dataset.target});
-const t=this.room.players.find(p=>p.id===b.dataset.target);
-rd.innerHTML=`${t.name}の役職と入れ替えました。`;used=true;}));}
+if(used)return;
+const target=this.room.players.find(p=>p.id===b.dataset.target);
+this.socket.middayAction(this.roomId,{type:'swap-role',targetId:b.dataset.target},(res)=>{
+if(res&&res.newRole){
+rd.innerHTML=`${target.name}の役職と入れ替えました。<span style="color:var(--accent)">「${res.newRole}」</span>になった。`;
+used=true;
+}
+});}));}
 else if(rn==='DJ'){
 ov.querySelectorAll('.midday-action-btn').forEach(b=>b.addEventListener('click',()=>{
-if(used)return;this.socket.middayAction(this.roomId,{type:'swap-self-cards',targetId:b.dataset.target});
-const t=this.room.players.find(p=>p.id===b.dataset.target);
-rd.innerHTML=`${t.name}の役職と残りカードを入れ替えました。`;used=true;}));}
+if(used)return;
+this.socket.middayAction(this.roomId,{type:'swap-self-cards',targetId:b.dataset.target},(res)=>{
+if(res&&res.targetName){
+rd.innerHTML=`${res.targetName}の「役職カード」と「残りカード」を入れ替えました。`;
+used=true;
+}
+});}));}
 document.getElementById('end-midday-btn').addEventListener('click',()=>this.socket.nextMiddayTurn(this.roomId));}
 renderVote(){
 const ov=document.getElementById('game-ui-overlay');
@@ -315,6 +330,6 @@ else if(this.room.executionResult){
 const exN=this.room.executionResult.executedPlayers.map(id=>{const p=this.room.players.find(x=>x.id===id);return p?p.name:'不明';}).join(' と ');
 msg+=`<p style="margin-bottom:20px;font-size:1.1rem">最多票を集め、処刑されたのは: <strong>${exN}</strong> です。</p>`;}
 const btns=this.isHost?`<div style="display:flex;justify-content:space-between;gap:10px;margin-top:30px"><button id="back-lobby-btn" class="btn-primary large" style="flex:1">ロビーに戻る</button><button id="back-title-btn" class="btn-secondary large" style="flex:1">タイトルに戻る</button></div>`:`<div style="margin-top:30px;padding:15px;background:rgba(0,0,0,0.4);border-radius:8px;border:1px dashed var(--glass-border)"><p style="color:var(--text-muted);margin:0">ホストの操作を待機しています...</p></div>`;
-ov.innerHTML=`<div class="turn-overlay glass" style="max-width:600px;width:100%;text-align:center">${msg}<div style="text-align:left;margin-top:30px;max-height:40vh;overflow-y:auto">${renderResultPlayers(this.room.players,this.roomId,this.room.winCounts)}</div>${btns}</div>`;
+ov.innerHTML=`<div class="turn-overlay glass" style="max-width:600px;width:100%;text-align:center">${msg}<div style="text-align:left;margin-top:30px;max-height:40vh;overflow-y:auto">${renderResultPlayers(this.room.players,this.roomId)}</div>${btns}</div>`;
 const bl=document.getElementById('back-lobby-btn');if(bl)bl.addEventListener('click',()=>{this.socket.backToLobby(this.roomId);});
 const bt=document.getElementById('back-title-btn');if(bt)bt.addEventListener('click',()=>location.reload());}}

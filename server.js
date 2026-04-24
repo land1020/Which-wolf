@@ -74,8 +74,7 @@ function createRoom(roomId) {
         currentMiddayRoleIndex: 0,
         executionResult: null,
         resultData: null,
-        winCountUpdated: false,
-        winCounts: {} // {playerName: count}
+        winCountUpdated: false
     };
 }
 
@@ -109,6 +108,7 @@ function sanitizeRoomForBroadcast(room) {
             prepFinished: p.prepFinished || false,
             voted: p.votedTo !== null,
             isOffline: p.isOffline || false,
+            cumulativeWins: p.cumulativeWins || 0,
             // カード情報（フェーズに応じてクライアント側で表示制御）
             dealtCards: p.dealtCards || null,
             chosenRole: p.chosenRole || null,
@@ -120,7 +120,6 @@ function sanitizeRoomForBroadcast(room) {
         currentMiddayRoleIndex: room.currentMiddayRoleIndex,
         executionResult: room.executionResult,
         resultData: room.resultData,
-        winCounts: room.winCounts,
     };
 }
 
@@ -235,6 +234,17 @@ function executeVotingResult(room) {
         }
     }
 
+    // 判定ロジック
+    const peaceIncluded = executedPlayers.includes('PEACE');
+    
+    // 1. PEACEが単独最多、またはPEACEを含む同票の場合
+    // 2. 全員が1票ずつの同票の場合
+    if (peaceIncluded || (maxVotes === 1 && executedPlayers.length > 1)) {
+        executedPlayers = ['PEACE'];
+    }
+
+
+
     if (maxVotes > 0 && executedPlayers[0] !== 'PEACE') {
         executedPlayers.forEach(id => {
             const target = room.players.find(p => p.id === id);
@@ -250,32 +260,10 @@ function recordResultData(room) {
     const isPeace = room.executionResult.executedPlayers.includes('PEACE')
         && room.executionResult.executedPlayers.length === 1;
 
-    let executedWolves = [];
-    let executedGhosts = [];
-    let executedTrapper = null;
+    // 1. 処刑された罠師の特定
+    const executedTrapper = room.players.find(p => p.isDead && p.chosenRole.role === '罠師');
 
-    room.players.forEach(p => {
-        if (p.isDead) {
-            if (p.chosenRole.role === '人狼' || p.chosenRole.role === '大狼') executedWolves.push(p);
-            else if (p.chosenRole.role === 'おばけ') executedGhosts.push(p);
-            else if (p.chosenRole.role === '罠師') executedTrapper = p;
-        }
-    });
-
-    const hasWolf = room.players.some(p => p.chosenRole.role === '人狼' || p.chosenRole.role === '大狼');
-
-    let winnerTeam = '人狼陣営';
-    if (executedGhosts.length > 0) {
-        winnerTeam = 'おばけ（単独勝利）';
-    } else if (isPeace) {
-        winnerTeam = hasWolf ? '人狼陣営' : '市民陣営';
-    } else if (executedWolves.length > 0) {
-        winnerTeam = '市民陣営';
-    } else if (!hasWolf) {
-        winnerTeam = '第三陣営・失敗（狼不在で市民吊り）';
-    }
-
-    // 罠師の道連れ処理
+    // 2. 罠師の道連れ処理（生死判定に影響するため最初に実行）
     if (executedTrapper) {
         room.players.forEach(p => {
             if (p.votedTo === executedTrapper.id) {
@@ -285,17 +273,43 @@ function recordResultData(room) {
         });
     }
 
-    // 勝者の決定
+    // 3. 生死が確定した状態で統計を取る
+    const deadWolves = room.players.filter(p => p.isDead && (p.chosenRole.role === '人狼' || p.chosenRole.role === '大狼'));
+    const deadGhosts = room.players.filter(p => p.isDead && p.chosenRole.role === 'おばけ' && !p.draggedDown);
+    const aliveWolves = room.players.filter(p => !p.isDead && (p.chosenRole.role === '人狼' || p.chosenRole.role === '大狼'));
+    const hasWolf = room.players.some(p => p.chosenRole.role === '人狼' || p.chosenRole.role === '大狼');
+    const fugitiveWins = room.players.some(p => p.chosenRole.role === '逃亡者' && !p.isDead);
+
+    const ghostWins = deadGhosts.length > 0;
+    // 市民勝利: おばけが勝っておらず、かつ「(平和村かつ狼不在)」または「(狼が1人以上いて全員死亡)」
+    const citizenWins = !ghostWins && ((isPeace && !hasWolf) || (!isPeace && hasWolf && aliveWolves.length === 0));
+    // 人狼勝利: おばけが勝っておらず、かつ「(平和村かつ狼存在)」または「(狼が1人以上いて1人以上生存)」
+    const wolfWins = !ghostWins && ((isPeace && hasWolf) || (!isPeace && hasWolf && aliveWolves.length > 0));
+
+    let winnerTeam = '';
+    if (ghostWins) {
+        winnerTeam = 'おばけ（単独勝利）';
+    } else if (isPeace) {
+        winnerTeam = hasWolf ? '人狼陣営' : '市民陣営';
+        if (fugitiveWins) winnerTeam += ' & 第三陣営';
+    } else {
+        if (citizenWins) winnerTeam = '市民陣営';
+        else if (wolfWins) winnerTeam = '人狼陣営';
+        else if (!hasWolf) winnerTeam = '市民陣営の失敗（人狼不在）';
+    }
+
+    // 4. 各プレイヤーの勝敗フラグ設定
     room.players.forEach(p => {
         const def = ROLE_DEFS[p.chosenRole.role];
         let isWinner = false;
-        if (winnerTeam === 'おばけ（単独勝利）') {
+        
+        if (ghostWins) {
             if (p.chosenRole.role === 'おばけ' && p.isDead && !p.draggedDown) isWinner = true;
-        } else if (winnerTeam === '市民陣営') {
-            if (def && def.faction === '人間チーム') isWinner = true;
-        } else if (winnerTeam === '人狼陣営') {
-            if (def && def.faction === '人狼チーム') isWinner = true;
+        } else {
+            if (citizenWins && def && def.faction === '人間チーム') isWinner = true;
+            if (wolfWins && def && def.faction === '人狼チーム') isWinner = true;
         }
+        
         if (p.chosenRole.role === '逃亡者' && !p.isDead) isWinner = true;
         p.isWinner = isWinner;
     });
@@ -303,18 +317,19 @@ function recordResultData(room) {
     room.resultData = {
         winnerTeam,
         isPeace,
-        executedWolves: executedWolves.map(p => p.id),
-        executedGhosts: executedGhosts.map(p => p.id),
+        executedWolves: deadWolves.map(p => p.id),
+        executedGhosts: deadGhosts.map(p => p.id),
     };
+
 
     // 累計勝利数の更新（サーバー側で一度だけ行う）
     if (!room.winCountUpdated) {
+        room.winCountUpdated = true; // 先にフラグを立てて二重実行を防ぐ
         room.players.forEach(p => {
             if (p.isWinner) {
-                room.winCounts[p.name] = (room.winCounts[p.name] || 0) + 1;
+                p.cumulativeWins = (p.cumulativeWins || 0) + 1;
             }
         });
-        room.winCountUpdated = true;
     }
 }
 
@@ -405,6 +420,12 @@ io.on('connection', (socket) => {
             return;
         }
 
+        if (room.players.some(p => p.name === playerName && !p.isNpc)) {
+            if (callback) callback({ error: 'その名前は既に使用されています。別の名前を入力してください。' });
+            return;
+        }
+
+
         const usedColors = room.players.map(p => p.color);
         const freeColors = AVAILABLE_COLORS.filter(c => !usedColors.includes(c));
         const color = freeColors.length > 0 ? freeColors[0] : '#ffffff';
@@ -423,6 +444,7 @@ io.on('connection', (socket) => {
             isWinner: false,
             prepFinished: false,
             isOffline: false,
+            cumulativeWins: 0,
         };
 
         room.players.push(player);
@@ -475,8 +497,13 @@ io.on('connection', (socket) => {
         if (!room || room.phase !== 'LOBBY') return;
         if (room.players.length >= room.settings.maxPlayers) return;
 
-        const npcCount = room.players.filter(p => p.name.startsWith('NPC')).length;
-        const name = `NPC${npcCount + 1}`;
+        const npcNames = room.players.filter(p => p.isNpc).map(p => p.name);
+        let nextNum = 1;
+        while (npcNames.includes(`NPC${nextNum}`)) {
+            nextNum++;
+        }
+        const name = `NPC${nextNum}`;
+
         const usedColors = room.players.map(p => p.color);
         const freeColors = AVAILABLE_COLORS.filter(c => !usedColors.includes(c));
         const color = freeColors.length > 0 ? freeColors[0] : '#ffffff';
@@ -495,6 +522,7 @@ io.on('connection', (socket) => {
             dealtCards: null,
             isWinner: false,
             prepFinished: false,
+            cumulativeWins: 0,
         });
 
         broadcastState(roomId);
@@ -603,7 +631,7 @@ io.on('connection', (socket) => {
     });
 
     // --- 昼フェーズ行動 ---
-    socket.on('midday-action', ({ roomId, action }) => {
+    socket.on('midday-action', ({ roomId, action }, callback) => {
         const room = rooms[roomId];
         if (!room || room.phase !== 'MIDDAY') return;
         const player = room.players.find(p => p.id === socket.id);
@@ -612,6 +640,8 @@ io.on('connection', (socket) => {
         const currentRole = room.middayRoles[room.currentMiddayRoleIndex];
         if (player.chosenRole.role !== currentRole) return;
 
+        let result = {};
+
         // 怪盗のカード入れ替え
         if (action.type === 'swap-role' && currentRole === '怪盗') {
             const target = room.players.find(p => p.id === action.targetId);
@@ -619,6 +649,7 @@ io.on('connection', (socket) => {
                 const temp = player.chosenRole;
                 player.chosenRole = target.chosenRole;
                 target.chosenRole = temp;
+                result.newRole = player.chosenRole.role;
             }
         }
 
@@ -629,11 +660,14 @@ io.on('connection', (socket) => {
                 const temp = target.chosenRole;
                 target.chosenRole = target.remainingCard;
                 target.remainingCard = temp;
+                result.targetName = target.name;
             }
         }
 
+        if (callback) callback(result);
         broadcastState(roomId);
     });
+
 
     // --- 昼フェーズ次へ ---
     socket.on('next-midday-turn', ({ roomId }) => {
