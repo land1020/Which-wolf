@@ -27,11 +27,9 @@ export function roleColor(side) {
     return side === 'Red' ? '#f43f5e' : (side === 'Gray' ? '#9ca3af' : '#3b82f6');
 }
 
-export function renderPlayerListItems(players, roomId) {
-    const roomKey = `werewolf_wins_${roomId || 'local'}`;
-    const winStats = JSON.parse(localStorage.getItem(roomKey) || '{}');
+export function renderPlayerListItems(players, roomId, winCounts = {}) {
     return players.map(p => {
-        const winCount = winStats[p.name] || 0;
+        const winCount = winCounts[p.name] || 0;
         const crown = winCount > 0 ? `<span style="color:#fbbf24;font-weight:bold;margin-left:auto;text-shadow:0 0 5px rgba(251,191,36,0.5);font-size:1rem" title="累計勝利数">👑 ${winCount}</span>` : '';
         const offlineBadge = p.isOffline ? `<span style="margin-left:8px;padding:2px 8px;background:rgba(244,63,94,0.2);color:#f43f5e;border:1px solid rgba(244,63,94,0.4);border-radius:10px;font-size:0.75rem;font-weight:bold;animation:pulse 1.5s ease-in-out infinite">📵 切断中</span>` : '';
         return `<li style="background:linear-gradient(90deg,${p.color}${p.isOffline?'18':'30'} 0%,rgba(0,0,0,0.3) 100%);border-left:4px solid ${p.isOffline?'#666':p.color};padding:12px 15px;border-radius:6px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,0.2);opacity:${p.isOffline?'0.7':'1'}">
@@ -90,15 +88,13 @@ export function renderTargetButtons(players, myId, btnClass, labelFn) {
     ).join('');
 }
 
-export function renderResultPlayers(players, roomId) {
-    const roomKey = `werewolf_wins_${roomId || 'local'}`;
-    const winStats = JSON.parse(localStorage.getItem(roomKey) || '{}');
+export function renderResultPlayers(players, roomId, winCounts = {}) {
     return players.map(p => {
-        const winCount = winStats[p.name] || 0;
+        const winCount = winCounts[p.name] || 0;
         const winLabel = p.isWinner ?
             `<span style="margin-left:12px;padding:4px 10px;background:linear-gradient(45deg,#fbbf24,#f59e0b);color:#000;font-weight:900;font-size:0.9rem;border-radius:6px;box-shadow:0 0 10px rgba(245,158,11,0.6);border:1px solid #fff">🏆 勝利</span>` :
             `<span style="margin-left:12px;padding:3px 8px;background:rgba(255,255,255,0.1);color:#9ca3af;font-weight:bold;font-size:0.8rem;border-radius:6px;border:1px solid rgba(255,255,255,0.2)">💀 敗北</span>`;
-        const crown = p.isWinner ? `<span style="color:#fbbf24;font-weight:900;margin-left:5px;text-shadow:0 0 5px rgba(251,191,36,0.8);font-size:1.1rem" title="累計勝利数">👑 ${winCount}</span>` : '';
+        const crown = winCount > 0 ? `<span style="color:#fbbf24;font-weight:900;margin-left:5px;text-shadow:0 0 5px rgba(251,191,36,0.8);font-size:1.1rem" title="累計勝利数">👑 ${winCount}</span>` : '';
         const statusText = p.isDead ? (p.draggedDown ? '死亡 (道連れ)' : '死亡 (処刑)') : '生存';
         const rc = p.chosenRole ? roleColor(p.chosenRole.side) : '#3b82f6';
         return `<div class="${p.isDead?'dead-player':''}" style="background:rgba(0,0,0,0.3);padding:15px;border-radius:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--glass-border);${!p.isDead?'box-shadow:0 2px 10px rgba(0,0,0,0.2);':''}">

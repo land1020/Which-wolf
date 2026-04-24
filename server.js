@@ -74,7 +74,8 @@ function createRoom(roomId) {
         currentMiddayRoleIndex: 0,
         executionResult: null,
         resultData: null,
-        winCountUpdated: false
+        winCountUpdated: false,
+        winCounts: {} // {playerName: count}
     };
 }
 
@@ -119,6 +120,7 @@ function sanitizeRoomForBroadcast(room) {
         currentMiddayRoleIndex: room.currentMiddayRoleIndex,
         executionResult: room.executionResult,
         resultData: room.resultData,
+        winCounts: room.winCounts,
     };
 }
 
@@ -304,6 +306,16 @@ function recordResultData(room) {
         executedWolves: executedWolves.map(p => p.id),
         executedGhosts: executedGhosts.map(p => p.id),
     };
+
+    // 累計勝利数の更新（サーバー側で一度だけ行う）
+    if (!room.winCountUpdated) {
+        room.players.forEach(p => {
+            if (p.isWinner) {
+                room.winCounts[p.name] = (room.winCounts[p.name] || 0) + 1;
+            }
+        });
+        room.winCountUpdated = true;
+    }
 }
 
 // ====================================

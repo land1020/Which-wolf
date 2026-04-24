@@ -114,7 +114,7 @@ updateLobbyUI(){
 if(!this.room)return;
 const list=document.getElementById('player-list');
 const count=document.getElementById('player-count');
-list.innerHTML=renderPlayerListItems(this.room.players,this.roomId);
+list.innerHTML=renderPlayerListItems(this.room.players,this.roomId,this.room.winCounts);
 count.textContent=this.room.players.length;
 // color picker
 const picker=document.getElementById('color-picker');
@@ -309,16 +309,12 @@ ov.innerHTML=`<div class="turn-overlay glass" style="text-align:center"><h2 styl
 renderResult(){
 const ov=document.getElementById('game-ui-overlay');
 const rd=this.room.resultData;if(!rd)return;
-// 勝利数更新
-const roomKey=`werewolf_wins_${this.roomId||'local'}`;
-let ws=JSON.parse(localStorage.getItem(roomKey)||'{}');
-if(!this._winUpdated){this.room.players.forEach(p=>{if(p.isWinner)ws[p.name]=(ws[p.name]||0)+1;});localStorage.setItem(roomKey,JSON.stringify(ws));this._winUpdated=true;}
 let msg=`<h2 class="winner-text" style="font-size:2.5rem;margin-bottom:20px;text-shadow:0 4px 10px rgba(245,158,11,0.5)">勝敗: ${rd.winnerTeam} の勝利！</h2>`;
 if(rd.isPeace){msg+=`<p style="margin-bottom:20px">全員が平和村へ投票しました。</p>`;}
 else if(this.room.executionResult){
 const exN=this.room.executionResult.executedPlayers.map(id=>{const p=this.room.players.find(x=>x.id===id);return p?p.name:'不明';}).join(' と ');
 msg+=`<p style="margin-bottom:20px;font-size:1.1rem">最多票を集め、処刑されたのは: <strong>${exN}</strong> です。</p>`;}
 const btns=this.isHost?`<div style="display:flex;justify-content:space-between;gap:10px;margin-top:30px"><button id="back-lobby-btn" class="btn-primary large" style="flex:1">ロビーに戻る</button><button id="back-title-btn" class="btn-secondary large" style="flex:1">タイトルに戻る</button></div>`:`<div style="margin-top:30px;padding:15px;background:rgba(0,0,0,0.4);border-radius:8px;border:1px dashed var(--glass-border)"><p style="color:var(--text-muted);margin:0">ホストの操作を待機しています...</p></div>`;
-ov.innerHTML=`<div class="turn-overlay glass" style="max-width:600px;width:100%;text-align:center">${msg}<div style="text-align:left;margin-top:30px;max-height:40vh;overflow-y:auto">${renderResultPlayers(this.room.players,this.roomId)}</div>${btns}</div>`;
+ov.innerHTML=`<div class="turn-overlay glass" style="max-width:600px;width:100%;text-align:center">${msg}<div style="text-align:left;margin-top:30px;max-height:40vh;overflow-y:auto">${renderResultPlayers(this.room.players,this.roomId,this.room.winCounts)}</div>${btns}</div>`;
 const bl=document.getElementById('back-lobby-btn');if(bl)bl.addEventListener('click',()=>{this.socket.backToLobby(this.roomId);});
 const bt=document.getElementById('back-title-btn');if(bt)bt.addEventListener('click',()=>location.reload());}}
